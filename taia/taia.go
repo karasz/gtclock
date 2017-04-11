@@ -17,16 +17,16 @@ type Taia struct {
 }
 
 const TAICONST = 4611686018427387914
-const Tai_Count = 8
-const Taia_Count = 16
+const TaiCount = 8
+const TaiaCount = 16
 
-func Tai_now() Tai {
+func TaiNow() Tai {
 	var result Tai
 	result.x = TAICONST + uint64(time.Now().Unix())
 	return result
 }
 
-func Taia_now() Taia {
+func TaiaNow() Taia {
 	var result Taia
 	now := new(syscall.Timeval)
 	err := syscall.Gettimeofday(now)
@@ -42,8 +42,8 @@ func Taia_now() Taia {
 	return result
 }
 
-func Tai_pack(t Tai) []byte {
-	result := make([]byte, Tai_Count)
+func TaiPack(t Tai) []byte {
+	result := make([]byte, TaiCount)
 	x := t.x
 	result[7] = byte(x & 255)
 	x >>= 8
@@ -64,7 +64,7 @@ func Tai_pack(t Tai) []byte {
 
 }
 
-func Tai_unpack(s []byte) Tai {
+func TaiUnpack(s []byte) Tai {
 	var result Tai
 	var x uint64
 	x = uint64(s[0])
@@ -86,12 +86,12 @@ func Tai_unpack(s []byte) Tai {
 	return result
 }
 
-func Taia_pack(t Taia) []byte {
-	result := make([]byte, Taia_Count)
-	zz := make([]byte, Tai_Count)
-	zz = Tai_pack(t.sec)
-	for i := 0; i < Tai_Count; i++ {
-		result[i+Tai_Count] = zz[i]
+func TaiaPack(t Taia) []byte {
+	result := make([]byte, TaiaCount)
+	zz := make([]byte, TaiCount)
+	zz = TaiPack(t.sec)
+	for i := 0; i < TaiCount; i++ {
+		result[i+TaiCount] = zz[i]
 	}
 	x := t.atto
 	result[7] = byte(x & 255)
@@ -114,10 +114,10 @@ func Taia_pack(t Taia) []byte {
 	return result
 }
 
-func Taia_unpack(s []byte) Taia {
+func TaiaUnpack(s []byte) Taia {
 	var result Taia
 	var zz Tai
-	zz = Tai_unpack(s[8:])
+	zz = TaiUnpack(s[8:])
 	result.sec = zz
 	x := uint64(s[4])
 	x <<= 8
