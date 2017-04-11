@@ -3,5 +3,5 @@ package main
 import "fmt"
 
 func main() {
-	fmt.Println("It's alive!")
+	fmt.Println("The server is alive!")
 }
