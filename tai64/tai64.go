@@ -84,14 +84,14 @@ func TainAdd(a, b Tain) Tain {
 	return result
 }
 
-// TaiSub substracts two TAI timestamps
+// TaiSub subtracts two TAI timestamps
 func TaiSub(a, b Tai) Tai {
 	var result Tai
 	result.x = a.x - b.x
 	return result
 }
 
-// TainSub substracts two TAI timestamps
+// TainSub subtracts two TAI timestamps
 func TainSub(a, b Tain) Tain {
 	var result Tain
 	result.sec.x = a.sec.x - b.sec.x
