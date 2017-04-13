@@ -1,8 +1,6 @@
 package tai64
 
 import (
-	"fmt"
-	"syscall"
 	"time"
 )
 
@@ -14,7 +12,7 @@ type Tai struct {
 // Tain struct to store TAIN timestamps
 type Tain struct {
 	sec  Tai
-	nano uint64
+	nano uint32
 }
 
 // TAICONST represents the second TAI started
@@ -36,16 +34,11 @@ func TaiNow() Tai {
 // TainNow returns the current time in TAIN format
 func TainNow() Tain {
 	var result Tain
-	now := new(syscall.Timeval)
-	err := syscall.Gettimeofday(now)
-	if err == nil {
-		var t Tai
-		t.x = TAICONST + uint64(now.Sec)
-		result.sec = t
-		result.nano = uint64(1000*uint64(now.Usec) + 500)
-	} else {
-		fmt.Println(err)
-	}
+	now := time.Now()
+	var t Tai
+	t.x = TAICONST + uint64(now.Unix())
+	result.sec = t
+	result.nano = uint32(now.Nanosecond())
 	return result
 }
 
@@ -70,6 +63,58 @@ func TaiPack(t Tai) []byte {
 	result[0] = byte(x)
 	return result
 
+}
+
+//TaiAdd computes the sum of two TAI timestamps
+func TaiAdd(a, b Tai) Tai {
+	var result Tai
+	result.x = a.x + b.x
+	return result
+}
+
+//TainAdd computes the sum of two TAIN timestamps
+func TainAdd(a, b Tain) Tain {
+	var result Tain
+	result.sec.x = a.sec.x + b.sec.x
+	result.nano = a.nano + b.nano
+	if result.nano > 999999999 {
+		result.sec.x++
+		result.nano -= 1000000000
+	}
+	return result
+}
+
+// TaiSub substracts two TAI timestamps
+func TaiSub(a, b Tai) Tai {
+	var result Tai
+	result.x = a.x - b.x
+	return result
+}
+
+// TainSub substracts two TAI timestamps
+func TainSub(a, b Tain) Tain {
+	var result Tain
+	result.sec.x = a.sec.x - b.sec.x
+	result.nano = a.nano - b.nano
+	if result.nano > a.nano {
+		result.nano += 1000000000
+		result.sec.x--
+	}
+	return result
+}
+
+// TaiTime returns a go time object from a TAI timestamp
+func TaiTime(t Tai) (time.Time, error) {
+	var result time.Time
+	result = time.Unix(int64(t.x-TAICONST), 0)
+	return result, nil
+}
+
+// TainTime returns a go time object from a TAIN timestamp
+func TainTime(t Tain) (time.Time, error) {
+	var result time.Time
+	result = time.Unix(int64(t.sec.x-TAICONST), int64(t.nano))
+	return result, nil
 }
 
 // TaiUnpack unpacks a TAI timestamp from a byte slice
@@ -129,7 +174,7 @@ func TainUnpack(s []byte) Tain {
 	x += uint64(s[2])
 	x <<= 8
 	x += uint64(s[3])
-	result.nano = x
+	result.nano = uint32(x)
 	return result
 
 }
