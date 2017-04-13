@@ -23,7 +23,7 @@ const TAICONST = 4611686018427387914
 // TaiCount is the length of a TAI timestamp
 const TaiCount = 8
 
-// TaiaCount is the length of a TAIN timestamp
+// TainCount is the length of a TAIN timestamp
 const TainCount = 12
 
 // TaiNow returns the current time in TAI format
@@ -72,7 +72,7 @@ func TaiPack(t Tai) []byte {
 
 }
 
-// TaiPack unpacks a TAI timestamp from a byte slice
+// TaiUnpack unpacks a TAI timestamp from a byte slice
 func TaiUnpack(s []byte) Tai {
 	var result Tai
 	var x uint64
@@ -116,7 +116,7 @@ func TainPack(t Tain) []byte {
 	return result
 }
 
-// TainPack unpacks a TAIN timestamp from a byte slice
+// TainUnpack unpacks a TAIN timestamp from a byte slice
 func TainUnpack(s []byte) Tain {
 	var result Tain
 	var zz Tai
