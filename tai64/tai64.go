@@ -6,18 +6,25 @@ import (
 	"time"
 )
 
+// Tai represents the second TAI started
 type Tai struct {
 	x uint64
 }
 
+// Taia struct to store taia
 type Taia struct {
 	sec  Tai
 	nano uint64
 	atto uint64
 }
 
+// TAICONST represents the second TAI started
 const TAICONST = 4611686018427387914
+
+// TaiCount is the length of a Tai timestamp
 const TaiCount = 8
+
+// TaiaCount is the length of a Taia timestamp
 const TaiaCount = 16
 
 func TaiNow() Tai {
