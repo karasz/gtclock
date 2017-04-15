@@ -9,7 +9,7 @@ import (
 	"github.com/karasz/gtclock/tai64"
 )
 
-const port = ":4011"
+const port = ":4014"
 
 func checkError(err error) {
 	if err != nil {
@@ -21,7 +21,8 @@ func checkError(err error) {
 func sendResponse(conn *net.UDPConn, addr *net.UDPAddr, b []byte) {
 	s := []byte("s")
 	copy(b[0:], s)
-	copy(b[4:], tai64.TaiaPack(tai64.TaiaNow()))
+	copy(b[4:], tai64.TainPack(tai64.TainNow()))
+	fmt.Println(tai64.TainUnpack(tai64.TainPack(tai64.TainNow())))
 	_, err := conn.WriteToUDP(b, addr)
 	if err != nil {
 		fmt.Printf("Couldn't send response %v", err)
