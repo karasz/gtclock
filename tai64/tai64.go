@@ -1,6 +1,7 @@
 package tai64
 
 import (
+	"encoding/binary"
 	"time"
 )
 
@@ -45,22 +46,7 @@ func TainNow() Tain {
 // TaiPack packs a TAI timestamp in a byte slice
 func TaiPack(t Tai) []byte {
 	result := make([]byte, TaiCount)
-	x := t.x
-	result[7] = byte(x & 255)
-	x >>= 8
-	result[6] = byte(x & 255)
-	x >>= 8
-	result[5] = byte(x & 255)
-	x >>= 8
-	result[4] = byte(x & 255)
-	x >>= 8
-	result[3] = byte(x & 255)
-	x >>= 8
-	result[2] = byte(x & 255)
-	x >>= 8
-	result[1] = byte(x & 255)
-	x >>= 8
-	result[0] = byte(x)
+	binary.BigEndian.PutUint64(result[:], t.x)
 	return result
 
 }
@@ -120,61 +106,22 @@ func TainTime(t Tain) (time.Time, error) {
 // TaiUnpack unpacks a TAI timestamp from a byte slice
 func TaiUnpack(s []byte) Tai {
 	var result Tai
-	var x uint64
-	x = uint64(s[0])
-	x <<= 8
-	x += uint64(s[1])
-	x <<= 8
-	x += uint64(s[2])
-	x <<= 8
-	x += uint64(s[3])
-	x <<= 8
-	x += uint64(s[4])
-	x <<= 8
-	x += uint64(s[5])
-	x <<= 8
-	x += uint64(s[6])
-	x <<= 8
-	x += uint64(s[7])
-	result.x = x
+	result.x = binary.BigEndian.Uint64(s[:])
 	return result
 }
 
 // TainPack packs a TAIN timestamp in a byte slice
 func TainPack(t Tain) []byte {
 	result := make([]byte, TainCount)
-	zz := make([]byte, TaiCount)
-	zz = TaiPack(t.sec)
-
-	for i := 0; i < TaiCount; i++ {
-		result[i+4] = zz[i]
-	}
-	x := t.nano
-	result[3] = byte(x & 255)
-	x >>= 8
-	result[2] = byte(x & 255)
-	x >>= 8
-	result[1] = byte(x & 255)
-	x >>= 8
-	result[0] = byte(x)
-
+	binary.BigEndian.PutUint64(result[:], t.sec.x)
+	binary.BigEndian.PutUint32(result[8:], t.nano)
 	return result
 }
 
 // TainUnpack unpacks a TAIN timestamp from a byte slice
 func TainUnpack(s []byte) Tain {
 	var result Tain
-	var zz Tai
-	zz = TaiUnpack(s[8:])
-	result.sec = zz
-	x := uint64(s[0])
-	x <<= 8
-	x += uint64(s[1])
-	x <<= 8
-	x += uint64(s[2])
-	x <<= 8
-	x += uint64(s[3])
-	result.nano = uint32(x)
+	result.sec.x = binary.BigEndian.Uint64(s[:])
+	result.nano = binary.BigEndian.Uint32(s[8:])
 	return result
-
 }
