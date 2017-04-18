@@ -22,7 +22,6 @@ func sendResponse(conn *net.UDPConn, addr *net.UDPAddr, b []byte) {
 	s := []byte("s")
 	copy(b[0:], s)
 	copy(b[4:], tai64.TainPack(tai64.TainNow()))
-	fmt.Println(tai64.TainUnpack(tai64.TainPack(tai64.TainNow())))
 	_, err := conn.WriteToUDP(b, addr)
 	if err != nil {
 		fmt.Printf("Couldn't send response %v", err)
