@@ -124,7 +124,7 @@ func main() {
 	fmt.Println("before: ", tai64.TainTime(tai64.TainNow()))
 	qf, _ := makeQuery()
 	resp, _ := tainExchange(qf, conn)
-	avgrtt := totalroundtrip / 10
+	avgrtt := totalroundtrip / 20 // we have 10 roundtrips.
 	serverSays := tai64.TainTime(decodeResp(resp)).Add(avgrtt)
 
 	if *saveClock {
