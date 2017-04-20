@@ -2,6 +2,7 @@ package tai64
 
 import (
 	"encoding/binary"
+	"fmt"
 	"time"
 )
 
@@ -52,17 +53,17 @@ func TaiPack(t Tai) []byte {
 }
 
 //TaiAdd computes the sum of two TAI timestamps
-func TaiAdd(a, b Tai) Tai {
+func TaiAdd(a Tai, b time.Duration) Tai {
 	var result Tai
-	result.x = a.x + b.x
+	result.x = a.x + uint64(b.Seconds())
 	return result
 }
 
 //TainAdd computes the sum of two TAIN timestamps
-func TainAdd(a, b Tain) Tain {
+func TainAdd(a Tain, b time.Duration) Tain {
 	var result Tain
-	result.sec.x = a.sec.x + b.sec.x
-	result.nano = a.nano + b.nano
+	result.sec.x = a.sec.x + uint64(b.Seconds())
+	result.nano = a.nano + uint32(b.Nanoseconds()-int64(b.Seconds())*1000000000)
 	if result.nano > 999999999 {
 		result.sec.x++
 		result.nano -= 1000000000
@@ -71,14 +72,15 @@ func TainAdd(a, b Tain) Tain {
 }
 
 // TaiSub subtracts two TAI timestamps
-func TaiSub(a, b Tai) Tai {
+func TaiSub(a, b Tai) (time.Duration, error) {
 	var result Tai
 	result.x = a.x - b.x
-	return result
+	q, err := time.ParseDuration(fmt.Sprintf("%ds", result.x))
+	return q, err
 }
 
 // TainSub subtracts two TAI timestamps
-func TainSub(a, b Tain) Tain {
+func TainSub(a, b Tain) (time.Duration, error) {
 	var result Tain
 	result.sec.x = a.sec.x - b.sec.x
 	result.nano = a.nano - b.nano
@@ -86,21 +88,22 @@ func TainSub(a, b Tain) Tain {
 		result.nano += 1000000000
 		result.sec.x--
 	}
-	return result
+	q, err := time.ParseDuration(fmt.Sprintf("%ds%dns", result.sec.x, result.nano))
+	return q, err
 }
 
 // TaiTime returns a go time object from a TAI timestamp
-func TaiTime(t Tai) (time.Time, error) {
+func TaiTime(t Tai) time.Time {
 	var result time.Time
 	result = time.Unix(int64(t.x-TAICONST), 0)
-	return result, nil
+	return result
 }
 
 // TainTime returns a go time object from a TAIN timestamp
-func TainTime(t Tain) (time.Time, error) {
+func TainTime(t Tain) time.Time {
 	var result time.Time
 	result = time.Unix(int64(t.sec.x-TAICONST), int64(t.nano))
-	return result, nil
+	return result
 }
 
 // TaiUnpack unpacks a TAI timestamp from a byte slice
