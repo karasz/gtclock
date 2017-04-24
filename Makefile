@@ -9,7 +9,7 @@ IMPORT_PATH := github.com/karasz/gtclock
 IGNORED_PACKAGES := /vendor/
 
 .PHONY: all
-all: gtclock gtclockd
+all: gtclock gtclockd gntpclock
 
 .PHONY: gtclock
 gtclock: .GOPATH/.ok
@@ -18,6 +18,10 @@ gtclock: .GOPATH/.ok
 .PHONY: gtclockd
 gtclockd: .GOPATH/.ok
 	$Q go install $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gtclockd
+
+.PHONY: gntpclock
+gntpclock: .GOPATH/.ok
+	$Q go install $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gntpclock
 
 ### Code not in the repository root? Another binary? Add to the path like this.
 # .PHONY: otherbin
