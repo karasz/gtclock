@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/karasz/gtclock/tai64"
+	"github.com/karasz/glibtai"
 )
 
 const tainPacket = 28
@@ -41,12 +41,12 @@ func randomString(n int) string {
 	return string(b)
 }
 
-func makeQuery() (query []byte, t0 tai64.Tain) {
+func makeQuery() (query []byte, t0 glibtai.TAIN) {
 	query = make([]byte, 28)
 	e := []byte("ctai")
 	copy(query[0:], e)
-	t0 = tai64.TainNow()
-	t := tai64.TainPack(t0)
+	t0 = glibtai.TAINNow()
+	t := glibtai.TAINPack(t0)
 	copy(query[4:], t)
 	z := []byte(randomString(8))
 	copy(query[20:], z)
@@ -58,14 +58,14 @@ func checkErr(e error) {
 	os.Exit(111)
 }
 
-func tainExchange(m []byte, c *net.UDPConn) (answer []byte, t1 tai64.Tain) {
+func tainExchange(m []byte, c *net.UDPConn) (answer []byte, t1 glibtai.TAIN) {
 	answer = make([]byte, tainPacket)
 
 	_, err := c.Write(m)
 	if err != nil {
 		checkErr(err)
 	}
-	t1 = tai64.TainNow()
+	t1 = glibtai.TAINNow()
 	_, err = c.Read(answer)
 	if err != nil {
 		checkErr(err)
@@ -73,8 +73,8 @@ func tainExchange(m []byte, c *net.UDPConn) (answer []byte, t1 tai64.Tain) {
 	return answer, t1
 }
 
-func decodeResp(resp []byte) tai64.Tain {
-	return tai64.TainUnpack(resp[4:16])
+func decodeResp(resp []byte) glibtai.TAIN {
+	return glibtai.TAINUnpack(resp[4:16])
 }
 
 func dur(d time.Duration) (int64, int32) {
@@ -113,7 +113,7 @@ func main() {
 
 		_, t1 := tainExchange(q, conn)
 
-		z, err := tai64.TainSub(t1, t0)
+		z, err := glibtai.TAINSub(t1, t0)
 		if err == nil {
 			totalroundtrip += z
 		} else {
@@ -121,11 +121,11 @@ func main() {
 		}
 
 	}
-	fmt.Println("before: ", tai64.TainTime(tai64.TainNow()))
+	fmt.Println("before: ", glibtai.TAINTime(glibtai.TAINNow()))
 	qf, _ := makeQuery()
 	resp, _ := tainExchange(qf, conn)
 	avgrtt := totalroundtrip / 20 // we have 10 roundtrips.
-	serverSays := tai64.TainTime(decodeResp(resp)).Add(avgrtt)
+	serverSays := glibtai.TAINTime(decodeResp(resp)).Add(avgrtt)
 
 	if *saveClock {
 		tv := new(syscall.Timeval)
@@ -139,5 +139,5 @@ func main() {
 
 	}
 
-	fmt.Println("after: ", tai64.TainTime(decodeResp(resp)).Add(avgrtt))
+	fmt.Println("after: ", glibtai.TAINTime(decodeResp(resp)).Add(avgrtt))
 }

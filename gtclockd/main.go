@@ -6,7 +6,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/karasz/gtclock/tai64"
+	"github.com/karasz/glibtai"
 )
 
 const port = ":4014"
@@ -21,7 +21,7 @@ func checkError(err error) {
 func sendResponse(conn *net.UDPConn, addr *net.UDPAddr, b []byte) {
 	s := []byte("s")
 	copy(b[0:], s)
-	copy(b[4:], tai64.TainPack(tai64.TainNow()))
+	copy(b[4:], glibtai.TAINPack(glibtai.TAINNow()))
 	_, err := conn.WriteToUDP(b, addr)
 	if err != nil {
 		fmt.Printf("Couldn't send response %v", err)

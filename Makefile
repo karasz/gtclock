@@ -1,7 +1,11 @@
 # The import path is where your repository can be found.
 # To import subpackages, always prepend the full import path.
 # If you change this, run `make clean`. Read more: https://git.io/vM7zV
-IMPORT_PATH := github.com/karasz/gtclock
+
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
+
+IMPORT_PATH := github.com/$(USER)/$(current_dir)
 
 # V := 1 # When V is set, print commands and build progress.
 
@@ -13,15 +17,15 @@ all: gtclock gtclockd gntpclock
 
 .PHONY: gtclock
 gtclock: .GOPATH/.ok
-	$Q go install $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gtclock
+	$Q go install -tags netgo $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gtclock
 
 .PHONY: gtclockd
 gtclockd: .GOPATH/.ok
-	$Q go install $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gtclockd
+	$Q go install -tags netgo  $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gtclockd
 
 .PHONY: gntpclock
 gntpclock: .GOPATH/.ok
-	$Q go install $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gntpclock
+	$Q go install -tags netgo  $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gntpclock
 
 ### Code not in the repository root? Another binary? Add to the path like this.
 # .PHONY: otherbin
@@ -32,7 +36,7 @@ gntpclock: .GOPATH/.ok
 
 ##### =====> Utility targets <===== #####
 
-.PHONY: clean test list cover format
+.PHONY: clean test list cover format gen
 
 clean:
 	$Q rm -rf bin .GOPATH
@@ -76,6 +80,11 @@ format: bin/goimports .GOPATH/.ok
 	$Q find .GOPATH/src/$(IMPORT_PATH)/ -iname \*.go | grep -v \
 	    -e "^$$" $(addprefix -e ,$(IGNORED_PACKAGES)) | xargs ./bin/goimports -w
 
+gen: .GOPATH/.ok
+	@echo "Running go generate"
+	$Q cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && go generate
+	@echo "Done!"
+
 ##### =====> Internals <===== #####
 
 .PHONY: setup
@@ -84,10 +93,12 @@ setup: clean .GOPATH/.ok
 	    echo "/.GOPATH" >> .gitignore; \
 	    echo "/bin" >> .gitignore; \
 	fi
-	go get -u github.com/FiloSottile/gvt
-	- ./bin/gvt fetch golang.org/x/tools/cmd/goimports
-	- ./bin/gvt fetch github.com/wadey/gocovmerge
-
+	go get -u github.com/golang/dep/cmd/dep
+	- go get -u golang.org/x/tools/cmd/goimports
+	- go get -u github.com/wadey/gocovmerge
+	@test -f Gopkg.toml || \
+	(cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && ./bin/dep init)
+	(cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && ./bin/dep ensure)
 VERSION          := $(shell git describe --tags --always --dirty="-dev")
 DATE             := $(shell date -u '+%Y-%m-%d-%H%M UTC')
 VERSION_FLAGS    := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
