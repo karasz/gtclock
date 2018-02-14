@@ -48,7 +48,7 @@ func Encode(t time.Time) ntpTime {
 	return ntpTime(sec<<32 | frac)
 }
 
-// Sub substracts two ntpTime values
+// Sub subtracts two ntpTime values
 func (t ntpTime) Sub(tt ntpTime) time.Duration {
 	return t.Decode().Sub(tt.Decode())
 }
@@ -94,7 +94,7 @@ func durtoTV(d time.Duration) (int64, int64) {
 }
 
 // GetTime returns the "receive time" from the remote NTP server
-// specifed as host.  NTP client mode is used.
+// specified as host.  NTP client mode is used.
 func GetTime(host string) (msg, ntpTime) {
 	raddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, "123"))
 	HandleErr(err)
@@ -120,6 +120,7 @@ func GetTime(host string) (msg, ntpTime) {
 	return *m, dest
 }
 
+// GetParams returns two time.Durations the time offset and rtt time
 func GetParams(m msg, dest ntpTime) (offset time.Duration, rtt time.Duration) {
 	T1 := m.OriginateTime
 	T2 := m.ReceiveTime
