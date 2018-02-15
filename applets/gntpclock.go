@@ -1,11 +1,9 @@
-package main
+package applets
 
 import (
 	"encoding/binary"
-	"flag"
 	"fmt"
 	"net"
-	"os"
 	"syscall"
 	"time"
 )
@@ -77,13 +75,6 @@ func (m *msg) SetMode(md mode) {
 	m.LiVnMode = (m.LiVnMode & 0xf8) | byte(md)
 }
 
-// HandleErr prints the error
-func HandleErr(e error) {
-	if e != nil {
-		fmt.Println(e)
-	}
-}
-
 // durtoTV transforms a time.Duration in two 64 bit integers
 // suitable for setting Timevalue values
 func durtoTV(d time.Duration) (int64, int64) {
@@ -95,12 +86,18 @@ func durtoTV(d time.Duration) (int64, int64) {
 
 // GetTime returns the "receive time" from the remote NTP server
 // specified as host.  NTP client mode is used.
-func GetTime(host string) (msg, ntpTime) {
+func GetTime(host string) (msg, ntpTime, error) {
 	raddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, "123"))
-	HandleErr(err)
+	if err != nil {
+		fmt.Println(err)
+		return msg{}, 0, err
+	}
 
 	con, err := net.DialUDP("udp", nil, raddr)
-	HandleErr(err)
+	if err != nil {
+		fmt.Println(err)
+		return msg{}, 0, err
+	}
 
 	defer con.Close()
 	con.SetDeadline(time.Now().Add(5 * time.Second))
@@ -111,13 +108,24 @@ func GetTime(host string) (msg, ntpTime) {
 	m.TransmitTime = Encode(time.Now())
 
 	err = binary.Write(con, binary.BigEndian, m)
-	HandleErr(err)
+	if err != nil {
+		fmt.Println(err)
+		return msg{}, 0, err
+	}
 
 	err = binary.Read(con, binary.BigEndian, m)
-	dest := Encode(time.Now())
-	HandleErr(err)
+	if err != nil {
+		fmt.Println(err)
+		return msg{}, 0, err
+	}
 
-	return *m, dest
+	dest := Encode(time.Now())
+	if err != nil {
+		fmt.Println(err)
+		return msg{}, 0, err
+	}
+
+	return *m, dest, nil
 }
 
 // GetParams returns two time.Durations the time offset and rtt time
@@ -131,27 +139,44 @@ func GetParams(m msg, dest ntpTime) (offset time.Duration, rtt time.Duration) {
 	return
 }
 
-func main() {
-	saveClock := flag.Bool("save", false, "update local clock")
-	flag.Parse()
-
-	servIP := net.ParseIP(flag.Arg(0))
-	if servIP == nil {
-		fmt.Println("Bad IP ")
-		os.Exit(111)
+func GNTPClockRun(args []string) int {
+	var servIP net.IP
+	var saveClock bool
+	switch len(args) {
+	case 1:
+		servIP = net.ParseIP(args[0])
+		if servIP == nil {
+			return 111
+		}
+	case 2:
+		servIP = net.ParseIP(args[0])
+		if servIP == nil {
+			return 111
+		}
+		saveClock = args[1] == "saveclock"
 	}
 
-	m, dst := GetTime(servIP.String())
+	m, dst, err := GetTime(servIP.String())
+	if err != nil {
+		fmt.Println(err)
+		return 111
+	}
+
 	offset, rtt := GetParams(m, dst)
 
 	fmt.Println("System time", time.Now())
 	fmt.Println("Offset ", offset, "RTT ", rtt)
 
-	if *saveClock {
+	if saveClock {
 		t := time.Now().Add(offset)
 		tv := syscall.NsecToTimeval(t.UnixNano())
 		err := syscall.Settimeofday(&tv)
-		HandleErr(err)
+
+		if err != nil {
+			fmt.Println(err)
+			return 111
+		}
 
 	}
+	return 0
 }

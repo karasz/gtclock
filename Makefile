@@ -13,19 +13,11 @@ IMPORT_PATH := github.com/$(USER)/$(current_dir)
 IGNORED_PACKAGES := /vendor/
 
 .PHONY: all
-all: gtclock gtclockd gntpclock
+all: build
 
-.PHONY: gtclock
-gtclock: .GOPATH/.ok
-	$Q go install -tags netgo $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gtclock
-
-.PHONY: gtclockd
-gtclockd: .GOPATH/.ok
-	$Q go install -tags netgo  $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gtclockd
-
-.PHONY: gntpclock
-gntpclock: .GOPATH/.ok
-	$Q go install -tags netgo  $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/gntpclock
+.PHONY: build
+build: .GOPATH/.ok
+	$Q go install -tags netgo  $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)
 
 ### Code not in the repository root? Another binary? Add to the path like this.
 # .PHONY: otherbin
@@ -101,7 +93,7 @@ setup: clean .GOPATH/.ok
 	(cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && ./bin/dep ensure)
 VERSION          := $(shell git describe --tags --always --dirty="-dev")
 DATE             := $(shell date -u '+%Y-%m-%d-%H%M UTC')
-VERSION_FLAGS    := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
+VERSION_FLAGS    := -ldflags='-s -w -X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
 
 # cd into the GOPATH to workaround ./... not following symlinks
 _allpackages = $(shell ( cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && \

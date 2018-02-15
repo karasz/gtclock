@@ -1,22 +1,14 @@
-package main
+package applets
 
 import (
 	"bytes"
 	"fmt"
 	"net"
-	"os"
 
 	"github.com/karasz/glibtai"
 )
 
 const port = ":4014"
-
-func checkError(err error) {
-	if err != nil {
-		fmt.Println("Error: ", err)
-		os.Exit(0)
-	}
-}
 
 func sendResponse(conn *net.UDPConn, addr *net.UDPAddr, b []byte) {
 	s := []byte("s")
@@ -28,11 +20,17 @@ func sendResponse(conn *net.UDPConn, addr *net.UDPAddr, b []byte) {
 	}
 }
 
-func main() {
+func GTClockDRun(args []string) int {
 	ServAddr, err := net.ResolveUDPAddr("udp", port)
-	checkError(err)
+	if err != nil {
+		fmt.Println(err)
+		return 111
+	}
 	ServConn, err := net.ListenUDP("udp", ServAddr)
-	checkError(err)
+	if err != nil {
+		fmt.Println(err)
+		return 111
+	}
 	defer ServConn.Close()
 
 	buf := make([]byte, 256)
@@ -48,4 +46,5 @@ func main() {
 			}
 		}
 	}
+	return 0
 }
