@@ -19,6 +19,8 @@ func main() {
 		res = app.GTClockDRun(args)
 	case "gntpclock":
 		res = app.GNTPClockRun(args)
+	case "gtailocal":
+		res = app.GTAILocalRun(os.Stdin)
 	default:
 		fmt.Println("Called as ", calledAs, ". I don't recognize that name")
 	}
