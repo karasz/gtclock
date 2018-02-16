@@ -163,8 +163,7 @@ func GNTPClockRun(args []string) int {
 	}
 
 	offset, rtt := GetParams(m, dst)
-
-	fmt.Println("System time", time.Now())
+	fmt.Println("System time", time.Now().AddDate(0, 0, 0)) // We need this in order to remove possible monotonic part
 	fmt.Println("Offset ", offset, "RTT ", rtt)
 
 	if saveClock {
