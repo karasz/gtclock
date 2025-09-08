@@ -1,3 +1,6 @@
+// Package main provides the gtclock multi-binary implementation.
+// gtclock can run as different programs based on the name it's called with:
+// gtclock, gtclockd, gntpclock, or gtailocal.
 package main
 
 import (
@@ -5,24 +8,26 @@ import (
 	"os"
 	"path/filepath"
 
-	app "github.com/karasz/gtclock/applets"
+	"github.com/karasz/gtclock/cmd"
 )
 
 func main() {
-	_, calledAs := filepath.Split(os.Args[0])
-	args := os.Args[1:]
-	res := 0
-	switch calledAs {
-	case "gtclock":
-		res = app.GTClockRun(args)
-	case "gtclockd":
-		res = app.GTClockDRun(args)
-	case "gntpclock":
-		res = app.GNTPClockRun(args)
-	case "gtailocal":
-		res = app.GTAILocalRun(os.Stdin)
-	default:
-		fmt.Println("Called as ", calledAs, ". I don't recognize that name")
+	app := filepath.Base(os.Args[0])
+
+	commands := map[string]func(args []string) int{
+		"gtclock":   cmd.MainDispatcher, // fallback dispatcher (like busybox)
+		"gtailocal": cmd.GTAILocalRun,
+		"gtclockd":  cmd.GTClockDRun,
+		"gtclockc":  cmd.GTClockCRun,
+		"gntpclock": cmd.GNTPClockRun,
 	}
-	os.Exit(res)
+
+	// Check if command exists
+	fn, ok := commands[app]
+
+	if !ok {
+		_, _ = fmt.Fprintf(os.Stderr, "Unknown command: %s\n", app)
+		os.Exit(1)
+	}
+	fn(os.Args[1:])
 }

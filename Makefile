@@ -1,150 +1,173 @@
-# The import path is where your repository can be found.
-# To import subpackages, always prepend the full import path.
-# If you change this, run `make clean`. Read more: https://git.io/vM7zV
+.PHONY: all clean generate fmt tidy check-grammar check-spelling check-shell check-jq
+.PHONY: coverage codecov clean-coverage race bench
+.PHONY: FORCE
 
-mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
-current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
+GO ?= go
+GOFMT ?= gofmt
+GOFMT_FLAGS = -w -l -s
+GOGENERATE_FLAGS = -v
+GOUP_FLAGS ?= -v
+GOUP_PACKAGES ?= ./...
+GOTEST_FLAGS ?=
+JQ ?= jq
 
-IMPORT_PATH := github.com/$(USER)/$(current_dir)
+TOOLSDIR := $(CURDIR)/internal/build
+TMPDIR ?= $(CURDIR)/.tmp
+OUTDIR ?= $(TMPDIR)
+COVERAGE_DIR ?= $(TMPDIR)/coverage
 
-# V := 1 # When V is set, print commands and build progress.
+# Dynamic version selection based on Go version
+# Format: $(TOOLSDIR)/get_version.sh <go_version> <tool_version1> <tool_version2> ..
+GOLANGCI_LINT_VERSION ?= $(shell $(TOOLSDIR)/get_version.sh 1.23 v2.3.0)
+REVIVE_VERSION ?= $(shell $(TOOLSDIR)/get_version.sh 1.23 v1.7)
 
-# Space separated patterns of packages to skip in list, test, format.
-IGNORED_PACKAGES := /vendor/
+GOLANGCI_LINT_URL ?= github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT ?= $(GO) run $(GOLANGCI_LINT_URL)
 
-.PHONY: all
-all: build
+REVIVE_CONF ?= $(TOOLSDIR)/revive.toml
+REVIVE_RUN_ARGS ?= -config $(REVIVE_CONF) -formatter friendly
+REVIVE_URL ?= github.com/mgechev/revive@$(REVIVE_VERSION)
+REVIVE ?= $(GO) run $(REVIVE_URL)
 
-.PHONY: build
-build: .GOPATH/.ok
-	$Q go install -tags netgo  $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)
+FIX_WHITESPACE ?= $(TOOLSDIR)/fix_whitespace.sh
+# Exclude Go files (handled separately by gofmt)
+FIX_WHITESPACE_EXCLUDE_GO ?= -name '*.go'
+# Exclude binary and image files
+FIX_WHITESPACE_EXCLUDE_BINARY_EXTS ?= exe dll so dylib a o test
+FIX_WHITESPACE_EXCLUDE_IMAGE_EXTS ?= png jpg jpeg gif ico pdf
+FIX_WHITESPACE_EXCLUDE_ARCHIVE_EXTS ?= zip tar gz bz2 xz 7z
+FIX_WHITESPACE_EXCLUDE_OTHER_EXTS ?= bin dat
+# Combine all exclusions
+FIX_WHITESPACE_EXCLUDE_EXTS ?= \
+	$(FIX_WHITESPACE_EXCLUDE_ARCHIVE_EXTS) \
+	$(FIX_WHITESPACE_EXCLUDE_BINARY_EXTS) \
+	$(FIX_WHITESPACE_EXCLUDE_IMAGE_EXTS) \
+	$(FIX_WHITESPACE_EXCLUDE_OTHER_EXTS)
+FIX_WHITESPACE_EXCLUDE_PATTERNS ?= $(patsubst %,-o -name '*.%',$(FIX_WHITESPACE_EXCLUDE_EXTS))
+FIX_WHITESPACE_EXCLUDE ?= $(FIX_WHITESPACE_EXCLUDE_GO) $(FIX_WHITESPACE_EXCLUDE_PATTERNS)
+FIX_WHITESPACE_ARGS ?= . \! \( $(FIX_WHITESPACE_EXCLUDE) \)
 
-### Code not in the repository root? Another binary? Add to the path like this.
-# .PHONY: otherbin
-# otherbin: .GOPATH/.ok
-# 	$Q go install $(if $V,-v) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/otherbin
+PNPX ?= pnpx
 
-##### ^^^^^^ EDIT ABOVE ^^^^^^ #####
+FIND_FILES_PRUNE_RULES ?= -name vendor -o -name .git -o -name node_modules
+FIND_FILES_PRUNE_ARGS ?= \( $(FIND_FILES_PRUNE_RULES) \) -prune
+FIND_FILES_GO_ARGS ?= $(FIND_FILES_PRUNE_ARGS) -o -name '*.go'
+FIND_FILES_MARKDOWN_ARGS ?= $(FIND_FILES_PRUNE_ARGS) -o -name '*.md'
 
-##### =====> Utility targets <===== #####
-
-.PHONY: clean test list cover format gen
-
-clean:
-	$Q rm -rf bin .GOPATH
-
-test: .GOPATH/.ok
-	$Q go test $(if $V,-v) -i -race $(allpackages) # install -race libs to speed up next run
-ifndef CI
-	$Q go vet $(allpackages)
-	$Q GODEBUG=cgocheck=2 go test -race $(allpackages)
+ifndef MARKDOWNLINT
+ifeq ($(shell $(PNPX) markdownlint-cli --version 2>&1 | grep -q '^[0-9]' && echo yes),yes)
+MARKDOWNLINT = $(PNPX) markdownlint-cli
 else
-	$Q ( go vet $(allpackages); echo $$? ) | \
-	    tee .GOPATH/test/vet.txt | sed '$$ d'; exit $$(tail -1 .GOPATH/test/vet.txt)
-	$Q ( GODEBUG=cgocheck=2 go test -v -race $(allpackages); echo $$? ) | \
-	    tee .GOPATH/test/output.txt | sed '$$ d'; exit $$(tail -1 .GOPATH/test/output.txt)
+MARKDOWNLINT = true
+endif
+endif
+MARKDOWNLINT_FLAGS ?= --fix --config $(TOOLSDIR)/markdownlint.json
+
+ifndef LANGUAGETOOL
+ifeq ($(shell $(PNPX) @twilio-labs/languagetool-cli --version 2>&1 | grep -qE '^(unknown|[0-9])' && echo yes),yes)
+LANGUAGETOOL = $(PNPX) @twilio-labs/languagetool-cli
+else
+LANGUAGETOOL = true
+endif
+endif
+LANGUAGETOOL_FLAGS ?= --config $(TOOLSDIR)/languagetool.cfg --custom-dict-file $(TMPDIR)/languagetool-dict.txt
+
+ifndef CSPELL
+ifeq ($(shell $(PNPX) cspell --version 2>&1 | grep -q '^[0-9]' && echo yes),yes)
+CSPELL = $(PNPX) cspell
+else
+CSPELL = true
+endif
+endif
+CSPELL_FLAGS ?= --no-progress --dot --config $(TOOLSDIR)/cspell.json
+
+ifndef SHELLCHECK
+ifeq ($(shell $(PNPX) shellcheck --version 2>&1 | grep -q '^ShellCheck' && echo yes),yes)
+SHELLCHECK = $(PNPX) shellcheck
+else
+SHELLCHECK = true
+endif
+endif
+SHELLCHECK_FLAGS ?=
+
+V = 0
+Q = $(if $(filter 1,$V),,@)
+M = $(shell if [ "$$(tput colors 2> /dev/null || echo 0)" -ge 8 ]; then printf "\033[34;1m▶\033[0m"; else printf "▶"; fi)
+
+GO_BUILD = $(GO) build -v
+GO_BUILD_CMD = $(GO_BUILD) -o "$(OUTDIR)"
+
+all: get generate tidy build
+
+clean: ; $(info $(M) cleaning…)
+	rm -rf $(TMPDIR)
+
+$(TMPDIR)/index: $(TOOLSDIR)/gen_index.sh Makefile FORCE ; $(info $(M) generating index…)
+	$Q mkdir -p $(@D)
+	$Q $< > $@~
+	$Q if cmp $@ $@~ 2> /dev/null >&2; then rm $@~; else mv $@~ $@; fi
+
+$(TMPDIR)/gen.mk: $(TOOLSDIR)/gen_mk.sh $(TMPDIR)/index Makefile ; $(info $(M) generating subproject rules…)
+	$Q mkdir -p $(@D)
+	$Q $< $(TMPDIR)/index > $@~
+	$Q if cmp $@ $@~ 2> /dev/null >&2; then rm $@~; else mv $@~ $@; fi
+
+$(TMPDIR)/languagetool-dict.txt: $(TOOLSDIR)/cspell.json | check-jq ; $(info $(M) generating languagetool dictionary…)
+	$Q mkdir -p $(@D)
+	$Q $(JQ) -r '.words[]' $< | sort > $@
+
+include $(TMPDIR)/gen.mk
+
+fmt: ; $(info $(M) reformatting sources…)
+	$Q find . $(FIND_FILES_GO_ARGS) -print0 | xargs -0 -r $(GOFMT) $(GOFMT_FLAGS)
+	$Q $(FIX_WHITESPACE) $(FIX_WHITESPACE_ARGS)
+ifneq ($(MARKDOWNLINT),true)
+	$Q find . $(FIND_FILES_MARKDOWN_ARGS) -print0 | xargs -0 -r $(MARKDOWNLINT) $(MARKDOWNLINT_FLAGS)
 endif
 
-list: .GOPATH/.ok
-	@echo $(allpackages)
-
-cover: bin/gocovmerge .GOPATH/.ok
-	@echo "NOTE: make cover does not exit 1 on failure, don't use it to check for tests success!"
-	$Q rm -f .GOPATH/cover/*.out .GOPATH/cover/all.merged
-	$(if $V,@echo "-- go test -coverpkg=./... -coverprofile=.GOPATH/cover/... ./...")
-	@for MOD in $(allpackages); do \
-		go test -coverpkg=`echo $(allpackages)|tr " " ","` \
-			-coverprofile=.GOPATH/cover/unit-`echo $$MOD|tr "/" "_"`.out \
-			$$MOD 2>&1 | grep -v "no packages being tested depend on"; \
-	done
-	$Q ./bin/gocovmerge .GOPATH/cover/*.out > .GOPATH/cover/all.merged
-ifndef CI
-	$Q go tool cover -html .GOPATH/cover/all.merged
+ifneq ($(LANGUAGETOOL),true)
+check-grammar: $(TMPDIR)/languagetool-dict.txt FORCE ; $(info $(M) checking grammar…)
+	$Q find . $(FIND_FILES_MARKDOWN_ARGS) -print0 | xargs -0 -r $(LANGUAGETOOL) $(LANGUAGETOOL_FLAGS)
 else
-	$Q go tool cover -html .GOPATH/cover/all.merged -o .GOPATH/cover/all.html
+check-grammar: FORCE ; $(info $(M) grammar checks disabled)
 endif
-	@echo ""
-	@echo "=====> Total test coverage: <====="
-	@echo ""
-	$Q go tool cover -func .GOPATH/cover/all.merged
 
-format: bin/goimports .GOPATH/.ok
-	$Q find .GOPATH/src/$(IMPORT_PATH)/ -iname \*.go | grep -v \
-	    -e "^$$" $(addprefix -e ,$(IGNORED_PACKAGES)) | xargs ./bin/goimports -w
+ifneq ($(CSPELL),true)
+TIDY_SPELLING = check-spelling
+check-spelling: FORCE ; $(info $(M) checking spelling…)
+	$Q $(CSPELL) $(CSPELL_FLAGS) "**/*.{go,md}"
+else
+TIDY_SPELLING =
+check-spelling: FORCE ; $(info $(M) spell checking disabled)
+endif
 
-gen: .GOPATH/.ok
-	@echo "Running go generate"
-	$Q cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && go generate
-	@echo "Done!"
+ifneq ($(SHELLCHECK),true)
+TIDY_SHELL = check-shell
+check-shell: FORCE ; $(info $(M) checking shell scripts…)
+	$Q find . $(FIND_FILES_PRUNE_ARGS) -o -name '*.sh' -print0 | xargs -0 -r $(SHELLCHECK) $(SHELLCHECK_FLAGS)
+else
+TIDY_SHELL =
+check-shell: FORCE ; $(info $(M) shell checks disabled)
+endif
 
-##### =====> Internals <===== #####
+tidy: fmt $(TIDY_SPELLING) $(TIDY_SHELL)
 
-.PHONY: setup
-setup: clean .GOPATH/.ok
-	@if ! grep "/.GOPATH" .gitignore > /dev/null 2>&1; then \
-	    echo "/.GOPATH" >> .gitignore; \
-	    echo "/bin" >> .gitignore; \
-	fi
-	go get -u github.com/golang/dep/cmd/dep
-	- go get -u golang.org/x/tools/cmd/goimports
-	- go get -u github.com/wadey/gocovmerge
-	@test -f Gopkg.toml || \
-	(cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && ./bin/dep init)
-	(cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && ./bin/dep ensure)
-VERSION          := $(shell git describe --tags --always --dirty="-dev")
-DATE             := $(shell date -u '+%Y-%m-%d-%H%M UTC')
-VERSION_FLAGS    := -ldflags='-s -w -X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
+generate: ; $(info $(M) running go:generate…)
+	$Q git grep -l '^//go:generate' | sort -uV | xargs -r -n1 $(GO) generate $(GOGENERATE_FLAGS)
 
-# cd into the GOPATH to workaround ./... not following symlinks
-_allpackages = $(shell ( cd $(CURDIR)/.GOPATH/src/$(IMPORT_PATH) && \
-    GOPATH=$(CURDIR)/.GOPATH go list ./... 2>&1 1>&3 | \
-    grep -v -e "^$$" $(addprefix -e ,$(IGNORED_PACKAGES)) 1>&2 ) 3>&1 | \
-    grep -v -e "^$$" $(addprefix -e ,$(IGNORED_PACKAGES)))
 
-# memoize allpackages, so that it's executed only once and only if used
-allpackages = $(if $(__allpackages),,$(eval __allpackages := $$(_allpackages)))$(__allpackages)
+# Generate Codecov upload script
+# This target prepares codecov.sh script for uploading coverage
+# data to Codecov with proper module flags
+codecov: $(COVERAGE_DIR)/coverage.out ; $(info $(M) preparing codecov data)
+	$Q $(TOOLSDIR)/make_codecov.sh $(TMPDIR)/index $(COVERAGE_DIR)
 
-export GOPATH := $(CURDIR)/.GOPATH
-unexport GOBIN
+bench: ; $(info $(M) running benchmarks…)
+	$Q $(GO) test -bench=. -benchmem
 
-Q := $(if $V,,@)
-
-.GOPATH/.ok:
-	$Q mkdir -p "$(dir .GOPATH/src/$(IMPORT_PATH))"
-	$Q ln -s ../../../.. ".GOPATH/src/$(IMPORT_PATH)"
-	$Q mkdir -p .GOPATH/test .GOPATH/cover
-	$Q mkdir -p bin
-	$Q ln -s ../bin .GOPATH/bin
-	$Q touch $@
-
-.PHONY: bin/gocovmerge bin/goimports
-bin/gocovmerge: .GOPATH/.ok
-	@test -d ./vendor/github.com/wadey/gocovmerge || \
-	    { echo "Vendored gocovmerge not found, try running 'make setup'..."; exit 1; }
-	$Q go install $(IMPORT_PATH)/vendor/github.com/wadey/gocovmerge
-bin/goimports: .GOPATH/.ok
-	@test -d ./vendor/golang.org/x/tools/cmd/goimports || \
-	    { echo "Vendored goimports not found, try running 'make setup'..."; exit 1; }
-	$Q go install $(IMPORT_PATH)/vendor/golang.org/x/tools/cmd/goimports
-
-# Based on https://github.com/cloudflare/hellogopher - v1.1 - MIT License
-#
-# Copyright (c) 2017 Cloudflare
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+check-jq: FORCE
+	$Q $(JQ) --version >/dev/null 2>&1 || { \
+		echo "Warning: jq is required to import cspell's custom dictionary but was not found" >&2; \
+		echo "  Install jq or set JQ variable to override" >&2; \
+		false; \
+	}

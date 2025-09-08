@@ -1,6 +1,7 @@
-package applets
+package cmd
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -56,13 +57,13 @@ func tainExchange(m []byte, c *net.UDPConn) (answer []byte, t1 glibtai.TAIN, e e
 
 	_, err := c.Write(m)
 	if err != nil {
-		fmt.Println(err)
+		_, _ = fmt.Println(err)
 		return answer, glibtai.TAIN{}, err
 	}
 	t1 = glibtai.TAINNow()
 	_, err = c.Read(answer)
 	if err != nil {
-		fmt.Println(err)
+		_, _ = fmt.Println(err)
 		return answer, glibtai.TAIN{}, err
 	}
 	return answer, t1, nil
@@ -78,79 +79,99 @@ func dur(d time.Duration) (int64, int32) {
 	return int64(sec), int32(nano)
 }
 
-func GTClockRun(args []string) int {
-	var servIP net.IP
-	var saveClock bool
+// parseGTClockArgs parses command line arguments for GTClock client.
+func parseGTClockArgs(args []string) (servIP net.IP, saveClock bool, err error) {
 	switch len(args) {
 	case 1:
 		servIP = net.ParseIP(args[0])
 		if servIP == nil {
-			return 111
+			return nil, false, fmt.Errorf("invalid IP address: %s", args[0])
 		}
 	case 2:
 		servIP = net.ParseIP(args[0])
 		if servIP == nil {
-			return 111
+			return nil, false, fmt.Errorf("invalid IP address: %s", args[0])
 		}
 		saveClock = args[1] == "saveclock"
 	default:
-		fmt.Println("Unknown number of arguments. Please use 1 or 2")
-		return 111
+		return nil, false, errors.New("unknown number of arguments. Please use 1 or 2")
 	}
-	serverAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(servIP.String(), "4014"))
-	if err != nil {
-		fmt.Println(err)
-		return 111
-	}
-	conn, err := net.DialUDP("udp", nil, serverAddr)
+	return servIP, saveClock, nil
+}
 
-	if err != nil {
-		fmt.Println(err)
-		return 111
-	}
-	defer conn.Close()
-
+// measureServerTime performs time synchronization measurements with the server.
+func measureServerTime(conn *net.UDPConn) (time.Time, error) {
 	var totalroundtrip time.Duration
 
 	for i := 0; i < 10; i++ {
-
 		q, t0 := makeQuery()
 
 		_, t1, e := tainExchange(q, conn)
 		if e != nil {
-			fmt.Println(e)
+			_, _ = fmt.Println(e)
 		}
 
 		z, err := glibtai.TAINSub(t1, t0)
 		if err == nil {
 			totalroundtrip += z
 		} else {
-			fmt.Println(err)
+			_, _ = fmt.Println(err)
 		}
-
 	}
-	fmt.Println("before: ", glibtai.TAINTime(glibtai.TAINNow()))
+	_, _ = fmt.Println("before: ", glibtai.TAINTime(glibtai.TAINNow()))
 	qf, _ := makeQuery()
 	resp, _, e := tainExchange(qf, conn)
 	if e != nil {
-		fmt.Println(e)
-		return 111
+		return time.Time{}, e
 	}
+
 	avgrtt := totalroundtrip / 20 // we have 10 roundtrips.
 	serverSays := glibtai.TAINTime(decodeResp(resp)).Add(avgrtt)
+	return serverSays, nil
+}
+
+// setSystemClockTime sets the system clock to the specified time.
+func setSystemClockTime(t time.Time) error {
+	tv := new(syscall.Timeval)
+	z := t.UnixNano()
+	sec, nsec := dur(time.Duration(z))
+	tv.Sec, tv.Usec = sec, int64(nsec*1000)
+	return syscall.Settimeofday(tv)
+}
+
+// GTClockCRun implements the gtclockc client functionality for TAIN time synchronization.
+func GTClockCRun(args []string) int {
+	servIP, saveClock, err := parseGTClockArgs(args)
+	if err != nil {
+		_, _ = fmt.Println(err)
+		return 111
+	}
+	serverAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(servIP.String(), "4014"))
+	if err != nil {
+		_, _ = fmt.Println(err)
+		return 111
+	}
+	conn, err := net.DialUDP("udp", nil, serverAddr)
+
+	if err != nil {
+		_, _ = fmt.Println(err)
+		return 111
+	}
+	defer func() { _ = conn.Close() }()
+
+	serverSays, err := measureServerTime(conn)
+	if err != nil {
+		_, _ = fmt.Println(err)
+		return 111
+	}
 
 	if saveClock {
-		tv := new(syscall.Timeval)
-		z := serverSays.UnixNano()
-		sec, nsec := dur(time.Duration(z))
-		tv.Sec, tv.Usec = sec, int64(nsec*1000)
-		err = syscall.Settimeofday(tv)
+		err = setSystemClockTime(serverSays)
 		if err != nil {
-			fmt.Println(err)
+			_, _ = fmt.Println(err)
 			return 111
 		}
-
 	}
-	fmt.Println("after: ", glibtai.TAINTime(decodeResp(resp)).Add(avgrtt))
+	_, _ = fmt.Println("after: ", serverSays)
 	return 0
 }

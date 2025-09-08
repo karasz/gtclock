@@ -1,4 +1,4 @@
-package applets
+package cmd
 
 import (
 	"testing"
