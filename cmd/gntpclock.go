@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"syscall"
 	"time"
 )
@@ -82,13 +83,13 @@ func (m *msg) setMode(md mode) {
 func getTime(host string) (msg, ntpTime, error) {
 	raddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, "123"))
 	if err != nil {
-		_, _ = fmt.Println(err)
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		return msg{}, 0, err
 	}
 
 	con, err := net.DialUDP("udp", nil, raddr)
 	if err != nil {
-		_, _ = fmt.Println(err)
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		return msg{}, 0, err
 	}
 
@@ -102,13 +103,13 @@ func getTime(host string) (msg, ntpTime, error) {
 
 	err = binary.Write(con, binary.BigEndian, m)
 	if err != nil {
-		_, _ = fmt.Println(err)
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		return msg{}, 0, err
 	}
 
 	err = binary.Read(con, binary.BigEndian, m)
 	if err != nil {
-		_, _ = fmt.Println(err)
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		return msg{}, 0, err
 	}
 
@@ -130,6 +131,10 @@ func getParams(m msg, dest ntpTime) (offset time.Duration, rtt time.Duration) {
 
 // parseNTPArgs parses command line arguments for NTP client.
 func parseNTPArgs(args []string) (servIP net.IP, saveClock bool, err error) {
+	if len(args) == 0 {
+		return nil, false, errors.New("usage: gntpclock <server_ip> [saveclock]")
+	}
+
 	switch len(args) {
 	case 1:
 		servIP = net.ParseIP(args[0])
@@ -143,7 +148,7 @@ func parseNTPArgs(args []string) (servIP net.IP, saveClock bool, err error) {
 		}
 		saveClock = args[1] == "saveclock"
 	default:
-		return nil, false, errors.New("invalid number of arguments")
+		return nil, false, errors.New("usage: gntpclock <server_ip> [saveclock]")
 	}
 	return servIP, saveClock, nil
 }
@@ -159,24 +164,21 @@ func setSystemClock(offset time.Duration) error {
 func GNTPClockRun(args []string) int {
 	servIP, saveClock, err := parseNTPArgs(args)
 	if err != nil {
-		_, _ = fmt.Println(err)
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 111
 	}
 
 	m, dst, err := getTime(servIP.String())
 	if err != nil {
-		_, _ = fmt.Println(err)
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 111
 	}
 
-	offset, rtt := getParams(m, dst)
-	// We need this in order to remove possible monotonic part
-	_, _ = fmt.Println("System time", time.Now().AddDate(0, 0, 0))
-	_, _ = fmt.Println("Offset ", offset, "RTT ", rtt)
+	offset, _ := getParams(m, dst)
 
 	if saveClock {
 		if err := setSystemClock(offset); err != nil {
-			_, _ = fmt.Println(err)
+			_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
 			return 111
 		}
 	}
