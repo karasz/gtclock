@@ -113,6 +113,7 @@
     "remoteaddr",
     "Resp",
     "resp",
+    "roundtrip",
     "roundtrips",
     "saveclock",
     "serv",
