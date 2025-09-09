@@ -21,8 +21,8 @@ func MainDispatcher(args []string) int {
 		ret = GTClockDRun(args[1:])
 	case "gtclockc":
 		ret = GTClockCRun(args[1:])
-	case "gntpclock":
-		ret = GNTPClockRun(args[1:])
+	case "gsntpclockc":
+		ret = GSNTPClockCRun(args[1:])
 
 	default:
 		_, _ = fmt.Fprintf(os.Stderr, "Unknown command: %s\n", args[0])

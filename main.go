@@ -15,11 +15,11 @@ func main() {
 	app := filepath.Base(os.Args[0])
 
 	commands := map[string]func(args []string) int{
-		"gtclock":   cmd.MainDispatcher, // fallback dispatcher (like busybox)
-		"gtailocal": cmd.GTAILocalRun,
-		"gtclockd":  cmd.GTClockDRun,
-		"gtclockc":  cmd.GTClockCRun,
-		"gntpclock": cmd.GNTPClockRun,
+		"gtclock":     cmd.MainDispatcher, // fallback dispatcher (like busybox)
+		"gtailocal":   cmd.GTAILocalRun,
+		"gtclockd":    cmd.GTClockDRun,
+		"gtclockc":    cmd.GTClockCRun,
+		"gsntpclockc": cmd.GSNTPClockCRun,
 	}
 
 	// Check if command exists

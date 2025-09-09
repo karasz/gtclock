@@ -160,8 +160,8 @@ func setSystemClock(offset time.Duration) error {
 	return syscall.Settimeofday(&tv)
 }
 
-// GNTPClockRun implements SNTP client functionality for time synchronization.
-func GNTPClockRun(args []string) int {
+// GSNTPClockCRun implements SNTP client functionality for time synchronization.
+func GSNTPClockCRun(args []string) int {
 	servIP, saveClock, err := parseNTPArgs(args)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)

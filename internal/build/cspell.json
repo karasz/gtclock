@@ -101,6 +101,8 @@
     "gntpclock",
     "GNTP",
     "gsdf",
+    "gsntpclockc",
+    "GSNTP",
     "gtailocal",
     "gtclock",
     "gtclockc",
