@@ -10,6 +10,7 @@
     "behaviour",
     "benchmem",
     "carryforward",
+    "clientok",
     "Codecov",
     "compounderror",
     "conn",
