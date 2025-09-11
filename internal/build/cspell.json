@@ -110,6 +110,8 @@
     "gtclockd",
     "gtclocd",
     "GTAI",
+    "gtudpd",
+    "nanosecs",
     "nsec",
     "processline",
     "raddr",
