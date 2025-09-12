@@ -292,7 +292,7 @@ func NewServer(config *Config, handler RequestHandler, validator RequestValidato
 		ctx:               ctx,
 		cancel:            cancel,
 		config:            config,
-		workerPool:        make(chan workItem, config.MaxConcurrentResponses*2), // 2X balanced trade-off between throughput and resource control
+		workerPool:        make(chan workItem, config.MaxConcurrentResponses*2), // 2X balanced trade-off
 	}
 
 	// Start cleanup routine

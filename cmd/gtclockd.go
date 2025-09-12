@@ -52,7 +52,6 @@ var responseHeader = []byte("s")
 
 // sendResponse handles TAIN protocol response
 func sendResponse(conn *net.UDPConn, _ int, remoteaddr *net.UDPAddr, buf []byte) {
-
 	copy(buf[0:1], responseHeader)
 	taiTime := glibtai.TAINNow()
 	copy(buf[4:16], glibtai.TAINPack(taiTime))
@@ -72,7 +71,6 @@ func validateTAINRequest(config *gtudpd.Config) gtudpd.RequestValidator {
 
 		// Check client permissions (this may involve filesystem operations)
 		return config.ClientOK(remoteIP)
-
 	}
 }
 
