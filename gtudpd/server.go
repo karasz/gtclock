@@ -16,17 +16,17 @@ import (
 
 const (
 	// DefaultMaxConcurrentResponses is the default limit for concurrent response goroutines
-	DefaultMaxConcurrentResponses = 100
+	DefaultMaxConcurrentResponses = 500
 	// DefaultMaxRequestSize is the default maximum UDP packet size to accept
 	DefaultMaxRequestSize = 64
 	// DefaultMaxRequestsPerIP is the default rate limit per IP
-	DefaultMaxRequestsPerIP = 10
+	DefaultMaxRequestsPerIP = 100
 	// DefaultRateLimitWindow is the default time window for rate limiting
 	DefaultRateLimitWindow = 1 * time.Second
 	// DefaultResponseTimeout is the default timeout for response operations
-	DefaultResponseTimeout = 5 * time.Second
+	DefaultResponseTimeout = 1 * time.Second
 	// DefaultReadTimeout is the default UDP read timeout to prevent blocking
-	DefaultReadTimeout = 100 * time.Millisecond
+	DefaultReadTimeout = 10 * time.Millisecond
 )
 
 // RequestHandler defines the interface for handling UDP requests
@@ -58,6 +58,7 @@ type Server struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	config            *Config
+	ipStringCache     sync.Map
 }
 
 type ipRateLimit struct {
@@ -337,6 +338,18 @@ func (s *Server) checkRateLimit(ip string) bool {
 	return true
 }
 
+// getIPString returns cached IP string to avoid repeated allocations
+func (s *Server) getIPString(ip net.IP) string {
+	if cached, ok := s.ipStringCache.Load(ip.String()); ok {
+		if ipStr, isString := cached.(string); isString {
+			return ipStr
+		}
+	}
+	ipStr := ip.String()
+	s.ipStringCache.Store(ipStr, ipStr)
+	return ipStr
+}
+
 // cleanupExpiredEntries removes old rate limit entries
 func (s *Server) cleanupExpiredEntries() {
 	s.rateLimitMutex.Lock()
@@ -368,7 +381,8 @@ func (s *Server) cleanupRateLimit() {
 // processRequest handles validation and response for a single request
 func (s *Server) processRequest(n int, remoteaddr *net.UDPAddr, buf []byte) {
 	// Check rate limit first (cheapest check)
-	if !s.checkRateLimit(remoteaddr.IP.String()) {
+	ipStr := s.getIPString(remoteaddr.IP)
+	if !s.checkRateLimit(ipStr) {
 		return // Drop request due to rate limiting
 	}
 
