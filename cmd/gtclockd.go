@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"net"
@@ -49,26 +48,31 @@ var configDir string
 //   - TAI64 epoch: 1970-01-01 00:00:10 TAI (10 seconds after Unix epoch)
 //   - Current offset: TAI = UTC + 37 seconds (as of 2025)
 
+var responseHeader = []byte("s")
+
 // sendResponse handles TAIN protocol response
 func sendResponse(conn *net.UDPConn, _ int, remoteaddr *net.UDPAddr, buf []byte) {
-	s := []byte("s")
-	copy(buf[0:], s)
-	copy(buf[4:], glibtai.TAINPack(glibtai.TAINNow()))
-	_, err := conn.WriteToUDP(buf, remoteaddr)
-	if err != nil {
-		_, _ = fmt.Printf("Couldn't send response %v", err)
-	}
+
+	copy(buf[0:1], responseHeader)
+	taiTime := glibtai.TAINNow()
+	copy(buf[4:16], glibtai.TAINPack(taiTime))
+	// Send response - ignore errors for performance (UDP is best-effort anyway)
+	_, _ = conn.WriteToUDP(buf, remoteaddr)
 }
 
 // validateTAINRequest validates TAIN protocol requests
 func validateTAINRequest(config *gtudpd.Config) gtudpd.RequestValidator {
 	return func(n int, buf []byte, remoteIP net.IP) bool {
-		// Check protocol format: minimum 20 bytes, maximum config.MaxRequestSize, starts with "ctai"
-		if n < 20 || n > config.MaxRequestSize || !bytes.Equal(buf[:4], []byte("ctai")) {
+		if n < 20 || n > config.MaxRequestSize {
 			return false
 		}
-		// Check client permissions using gtudpd
+		if buf[0] != 'c' || buf[1] != 't' || buf[2] != 'a' || buf[3] != 'i' {
+			return false
+		}
+
+		// Check client permissions (this may involve filesystem operations)
 		return config.ClientOK(remoteIP)
+
 	}
 }
 
