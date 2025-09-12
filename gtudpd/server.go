@@ -58,12 +58,20 @@ type Server struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	config            *Config
+	workerPool        chan workItem
 	ipStringCache     sync.Map
 }
 
 type ipRateLimit struct {
 	requests int
 	window   time.Time
+}
+
+// workItem represents a request to be processed by worker pool
+type workItem struct {
+	n          int
+	remoteAddr *net.UDPAddr
+	buf        []byte
 }
 
 // validatePortFilePath checks if the port file path is safe to read
@@ -284,11 +292,16 @@ func NewServer(config *Config, handler RequestHandler, validator RequestValidato
 		ctx:               ctx,
 		cancel:            cancel,
 		config:            config,
+		workerPool:        make(chan workItem, config.MaxConcurrentResponses*2), // 2X balanced trade-off between throughput and resource control
 	}
 
 	// Start cleanup routine
 	go server.cleanupRateLimit()
 
+	// Start worker pool
+	for i := 0; i < config.MaxConcurrentResponses; i++ {
+		go server.worker()
+	}
 	return server, nil
 }
 
@@ -390,37 +403,34 @@ func (s *Server) processRequest(n int, remoteaddr *net.UDPAddr, buf []byte) {
 		return
 	}
 
+	// Copy buffer to avoid race conditions with shared buffer
+	bufCopy := make([]byte, n)
+	copy(bufCopy, buf[:n])
+	// Use worker pool instead of spawning goroutine per request
 	select {
-	case s.responseSemaphore <- struct{}{}:
-		// Successfully acquired semaphore slot
-		go s.handleResponse(n, remoteaddr, buf)
+	case s.workerPool <- workItem{n: n, remoteAddr: remoteaddr, buf: bufCopy}:
+		// Successfully queued work item
 	default:
-		// No available slots, drop the request
-		// This prevents resource exhaustion
+		// Worker pool full, drop request to prevent resource exhaustion
 	}
 }
 
 // handleResponse processes the response with timeout protection
 func (s *Server) handleResponse(n int, remoteaddr *net.UDPAddr, buf []byte) {
-	defer func() { <-s.responseSemaphore }() // Release semaphore when done
+	// Direct call without complex timeout handling for better performance
+	// The UDP write operation is typically fast and non-blocking
+	s.handler(s.conn, n, remoteaddr, buf)
+}
 
-	// Create a timeout context for the response operation
-	ctx, cancel := context.WithTimeout(context.Background(), s.config.ResponseTimeout)
-	defer cancel()
-
-	// Channel to signal completion
-	done := make(chan error, 1)
-
-	go func() {
-		s.handler(s.conn, n, remoteaddr, buf)
-		done <- nil
-	}()
-
-	select {
-	case <-done:
-		// Response completed successfully
-	case <-ctx.Done():
-		// Response timed out
+// worker processes work items from the worker pool
+func (s *Server) worker() {
+	for {
+		select {
+		case item := <-s.workerPool:
+			s.handleResponse(item.n, item.remoteAddr, item.buf)
+		case <-s.ctx.Done():
+			return
+		}
 	}
 }
 
@@ -433,23 +443,29 @@ func (*Server) handleReadError(err error) bool {
 	return false // Continue processing
 }
 
+// refreshDeadline updates the connection deadline
+func (s *Server) refreshDeadline() {
+	_ = s.conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout))
+}
+
 // handleClientRequests processes incoming client requests
 func (s *Server) handleClientRequests(buf []byte) {
+	s.refreshDeadline()
+	deadlineRefresh := time.NewTicker(s.config.ReadTimeout / 2)
+	defer deadlineRefresh.Stop()
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
+		case <-deadlineRefresh.C:
+			s.refreshDeadline()
 		default:
-		}
-
-		// Reset read deadline for each iteration
-		if err := s.conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
-			continue
 		}
 
 		n, remoteaddr, err := s.conn.ReadFromUDP(buf)
 		if err != nil {
 			s.handleReadError(err)
+			s.refreshDeadline()
 			continue
 		}
 
