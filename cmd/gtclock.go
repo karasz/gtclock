@@ -6,7 +6,6 @@ import (
 	"math"
 	"math/rand"
 	"net"
-	"syscall"
 	"time"
 
 	"github.com/karasz/glibtai"
@@ -128,15 +127,6 @@ func measureServerTime(conn *net.UDPConn) (time.Time, error) {
 	avgrtt := totalroundtrip / 20 // we have 10 roundtrips.
 	serverSays := glibtai.TAINTime(decodeResp(resp)).Add(avgrtt)
 	return serverSays, nil
-}
-
-// setSystemClockTime sets the system clock to the specified time.
-func setSystemClockTime(t time.Time) error {
-	tv := new(syscall.Timeval)
-	z := t.UnixNano()
-	sec, nsec := dur(time.Duration(z))
-	tv.Sec, tv.Usec = sec, int64(nsec*1000)
-	return syscall.Settimeofday(tv)
 }
 
 // GTClockCRun implements the gtclockc client functionality for TAIN time synchronization.

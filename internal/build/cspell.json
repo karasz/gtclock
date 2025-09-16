@@ -126,6 +126,7 @@
     "saveclock",
     "serv",
     "SNTP",
+    "SYSTEMTIME",
     "TAICLOCK",
     "totalroundtrip",
     "Usec"

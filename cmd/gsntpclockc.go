@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"syscall"
 	"time"
 )
 
@@ -151,13 +150,6 @@ func parseNTPArgs(args []string) (servIP net.IP, saveClock bool, err error) {
 		return nil, false, errors.New("usage: gntpclock <server_ip> [saveclock]")
 	}
 	return servIP, saveClock, nil
-}
-
-// setSystemClock sets the system clock with the given offset.
-func setSystemClock(offset time.Duration) error {
-	t := time.Now().Add(offset)
-	tv := syscall.NsecToTimeval(t.UnixNano())
-	return syscall.Settimeofday(&tv)
 }
 
 // GSNTPClockCRun implements SNTP client functionality for time synchronization.
