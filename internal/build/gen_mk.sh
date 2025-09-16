@@ -261,7 +261,6 @@ EOT
 gen_release_targets() {
 	local name="$1" dir="$2" mod="$3"
 	local has_main=false
-	local has_cmd=false
 
 	# Check if this module has a main.go or cmd/ directory
 	if [ -f "$dir/main.go" ] || find "$dir" -type d -name cmd -print -quit | grep -q .; then

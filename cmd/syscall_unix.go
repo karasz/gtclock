@@ -1,4 +1,4 @@
-//go:build unix && !windows && !linux && !darwin && !freebsd && !openbsd && !netbsd
+//go:build unix && !windows && !linux && !darwin && !freebsd && !openbsd && !netbsd && !aix
 
 package cmd
 
