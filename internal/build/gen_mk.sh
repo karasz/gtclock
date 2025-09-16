@@ -272,7 +272,7 @@ gen_release_targets() {
 		cat <<EOT
 
 # Release targets for $name
-.PHONY: release-$name release-clean-$name release-build-$name release-sign-$name release-checksums-$name
+.PHONY: release-$name release-clean-$name release-build-$name release-sign-$name release-checksums-$name push-$name
 release-$name: release-clean-$name release-build-$name release-sign-$name release-checksums-$name
 
 release-clean-$name: ; \$(info \$(M) cleaning release directory for $name…)
@@ -312,6 +312,38 @@ release-checksums-$name: | release-build-$name ; \$(info \$(M) generating checks
 		find . -type f \( ! -name "*.asc" ! -name "*.txt" \) -exec sha256sum {} + > checksums.txt && \\
 		echo "Generated checksums.txt for $name"
 
+push-$name: | release-$name ; \$(info \$(M) pushing release artifacts for $name to GitHub…)
+	\$Q if ! command -v gh >/dev/null 2>&1; then \\
+		echo "Error: gh CLI is required but not installed" >&2; \\
+		echo "Install it from https://cli.github.com/" >&2; \\
+		exit 1; \\
+	fi
+	\$Q if ! gh auth status >/dev/null 2>&1; then \\
+		echo "Error: Not authenticated with GitHub CLI" >&2; \\
+		echo "Run 'gh auth login' first" >&2; \\
+		exit 1; \\
+	fi
+	\$Q VERSION="\$\$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)"; \\
+		RELEASE_TITLE="$name v\$\$VERSION"; \\
+		RELEASE_TAG="v\$\$VERSION"; \\
+		echo "Creating release \$\$RELEASE_TAG..."; \\
+		if gh release view "\$\$RELEASE_TAG" >/dev/null 2>&1; then \\
+			echo "Release \$\$RELEASE_TAG already exists, uploading additional artifacts..."; \\
+		else \\
+			gh release create "\$\$RELEASE_TAG" \\
+				--title "\$\$RELEASE_TITLE" \\
+				--notes "Release \$\$RELEASE_TAG" \\
+				--draft=false \\
+				--prerelease=false; \\
+		fi; \\
+		cd \$(RELEASE_DIR)/$name && \\
+		for file in *; do \\
+			[ -f "\$\$file" ] || continue; \\
+			echo "Uploading \$\$file..."; \\
+			gh release upload "\$\$RELEASE_TAG" "\$\$file" --clobber; \\
+		done; \\
+		echo "Successfully pushed release \$\$RELEASE_TAG"
+
 EOT
 	fi
 }
@@ -331,10 +363,17 @@ while IFS=: read -r name dir mod deps; do
 done < "$INDEX"
 
 if [ -n "$release_projects" ]; then
+	# Generate push targets list
+	push_projects=$(echo "$release_projects" | sed 's/release-/push-/g')
+
 	cat <<EOT
 
 # Main release target
 .PHONY: release
 release:$release_projects
+
+# Main push target
+.PHONY: push
+push:$push_projects
 EOT
 fi
