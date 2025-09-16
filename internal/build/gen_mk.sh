@@ -323,9 +323,9 @@ push-$name: | release-$name ; \$(info \$(M) pushing release artifacts for $name 
 		echo "Run 'gh auth login' first" >&2; \\
 		exit 1; \\
 	fi
-	\$Q VERSION="\$\$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)"; \\
-		RELEASE_TITLE="$name v\$\$VERSION"; \\
-		RELEASE_TAG="v\$\$VERSION"; \\
+	\$Q VERSION="\$\$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0-\$\$(git rev-parse --short HEAD)")"; \\
+		case "\$\$VERSION" in v*) RELEASE_TAG="\$\$VERSION"; RELEASE_VERSION="\$\${VERSION#v}" ;; *) RELEASE_TAG="v\$\$VERSION"; RELEASE_VERSION="\$\$VERSION" ;; esac; \\
+		RELEASE_TITLE="$name v\$\$RELEASE_VERSION"; \\
 		echo "Creating release \$\$RELEASE_TAG..."; \\
 		if gh release view "\$\$RELEASE_TAG" >/dev/null 2>&1; then \\
 			echo "Release \$\$RELEASE_TAG already exists, uploading additional artifacts..."; \\
