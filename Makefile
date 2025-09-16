@@ -97,6 +97,25 @@ M = $(shell if [ "$$(tput colors 2> /dev/null || echo 0)" -ge 8 ]; then printf "
 GO_BUILD = $(GO) build -v
 GO_BUILD_CMD = $(GO_BUILD) -o "$(OUTDIR)"
 
+# Cross-compilation release settings
+RELEASE_DIR ?= $(TMPDIR)/release
+RELEASE_PLATFORMS ?= \
+	linux/amd64 linux/arm64 linux/386 linux/arm \
+	windows/amd64 windows/386 windows/arm64 \
+	darwin/amd64 darwin/arm64 \
+	freebsd/amd64 freebsd/arm64 \
+	openbsd/amd64 openbsd/arm64 \
+	netbsd/amd64 netbsd/arm64
+
+# Binary name (extracted from module)
+BINARY_NAME ?= $(shell basename $(shell $(GO) list -f '{{.ImportPath}}' .))
+
+# GPG signing - auto-detect with manual override
+GPG_SIGN ?= true
+GPG_KEY ?= $(shell git config --get user.signingkey 2>/dev/null || \
+           gpg --list-secret-keys --keyid-format LONG --with-colons | \
+           awk -F: '/^sec:/ {print $$5; exit}')
+
 all: get generate tidy build
 
 clean: ; $(info $(M) cleaning…)

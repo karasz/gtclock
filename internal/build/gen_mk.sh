@@ -256,3 +256,86 @@ $(COVERAGE_DIR)/coverage.out: | coverage ; $(info $(M) merging coverage profiles
 	$Q $(TOOLSDIR)/merge_coverage.sh $(wildcard $(COVERAGE_DIR)/coverage_*.prof) > $@~
 	$Q mv $@~ $@
 EOT
+
+# Add release-related rules for projects with main.go or cmd/ directories
+gen_release_targets() {
+	local name="$1" dir="$2" mod="$3"
+	local has_main=false
+	local has_cmd=false
+
+	# Check if this module has a main.go or cmd/ directory
+	if [ -f "$dir/main.go" ] || find "$dir" -type d -name cmd -print -quit | grep -q .; then
+		has_main=true
+	fi
+
+	# Only generate release targets for modules that produce binaries
+	if [ "$has_main" = true ]; then
+		cat <<EOT
+
+# Release targets for $name
+.PHONY: release-$name release-clean-$name release-build-$name release-sign-$name release-checksums-$name
+release-$name: release-clean-$name release-build-$name release-sign-$name release-checksums-$name
+
+release-clean-$name: ; \$(info \$(M) cleaning release directory for $name…)
+	\$Q rm -rf \$(RELEASE_DIR)/$name
+	\$Q mkdir -p \$(RELEASE_DIR)/$name
+
+release-build-$name: | release-clean-$name ; \$(info \$(M) building release binaries for $name…)
+	\$Q cd "$dir" && for platform in \$(RELEASE_PLATFORMS); do \\
+		GOOS=\$\${platform%/*}; \\
+		GOARCH=\$\${platform#*/}; \\
+		binary_name="\$(BINARY_NAME)"; \\
+		[ -z "\$\$binary_name" ] && binary_name="\$(shell basename $mod)"; \\
+		output="\$(RELEASE_DIR)/$name/\$\${binary_name}-\$\${GOOS}-\$\${GOARCH}"; \\
+		[ "\$\$GOOS" = "windows" ] && output="\$\${output}.exe"; \\
+		echo "Building \$\$output..."; \\
+		GOOS=\$\$GOOS GOARCH=\$\$GOARCH \$(GO_BUILD) -o "\$\$output" .; \\
+	done
+
+release-sign-$name: | release-build-$name ; \$(info \$(M) signing release binaries for $name…)
+ifeq (\$(GPG_SIGN),true)
+ifneq (\$(GPG_KEY),)
+	\$Q for binary in \$(RELEASE_DIR)/$name/*; do \\
+		[ -f "\$\$binary" ] || continue; \\
+		case "\$\$binary" in *.asc|*.txt) continue ;; esac; \\
+		echo "Signing \$\$binary..."; \\
+		gpg --default-key \$(GPG_KEY) --armor --detach-sign "\$\$binary"; \\
+	done
+else
+	\$Q echo "Warning: GPG_KEY not found, skipping signing for $name"
+endif
+else
+	\$Q echo "GPG signing disabled for $name"
+endif
+
+release-checksums-$name: | release-build-$name ; \$(info \$(M) generating checksums for $name…)
+	\$Q cd \$(RELEASE_DIR)/$name && \\
+		find . -type f \( ! -name "*.asc" ! -name "*.txt" \) -exec sha256sum {} + > checksums.txt && \\
+		echo "Generated checksums.txt for $name"
+
+EOT
+	fi
+}
+
+# Generate release targets for each project
+while IFS=: read -r name dir mod deps; do
+	gen_release_targets "$name" "$dir" "$mod"
+done < "$INDEX"
+
+# Add main release target that builds all projects
+release_projects=""
+while IFS=: read -r name dir mod deps; do
+	# Check if this module produces binaries
+	if [ -f "$dir/main.go" ] || find "$dir" -type d -name cmd -print -quit | grep -q .; then
+		release_projects="$release_projects release-$name"
+	fi
+done < "$INDEX"
+
+if [ -n "$release_projects" ]; then
+	cat <<EOT
+
+# Main release target
+.PHONY: release
+release:$release_projects
+EOT
+fi
